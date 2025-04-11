@@ -7,6 +7,7 @@
 #define TEMP 20
 #define STEP 0.2
 #define COUNT 10000
+#define SCORE_THRESHOLD -3600.0
 
 char *playfairDecipher(char *key, char *in,char *out, int len);
 float playfairCrack(char *text,int len, char* maxKey);
@@ -35,6 +36,12 @@ int main(int argc, char *argv[])
             printf("    Key: '%s'\n",key);
             playfairDecipher(key, cipher,out, len);
             printf("    plaintext: '%s'\n",out);
+
+            // 当得分超过设定阈值时，自动结束程序
+            if (score > SCORE_THRESHOLD) {
+                printf("Reached score threshold %.2f, stopping search.\n", SCORE_THRESHOLD);
+                break;
+            }
         }
     }
     free(out);
@@ -103,6 +110,45 @@ void modifyKey(char *newKey,char *oldKey){
  */
 float playfairCrack(char *text,int len, char* bestKey){
    //todo
+   float maxScore = -1e10f;
+   char parentKey[26], childKey[26];
+   char *plaintext = malloc(sizeof(char) * (len + 1));
+   float parentScore, childScore, dF;
+   double temp;
+   int i;
+
+   // 初始化，使用初始密钥解密打分
+   strcpy(parentKey, bestKey);
+   playfairDecipher(parentKey, text, plaintext, len);
+   parentScore = (float)scoreTextQgram(plaintext, len);
+   maxScore = parentScore;
+   strcpy(bestKey, parentKey);
+
+   // 模拟退火循环，从高温逐步降温
+   for (float T = TEMP; T >= 0; T -= STEP){
+       for (i = 0; i < COUNT; i++){
+           modifyKey(childKey, parentKey);
+           playfairDecipher(childKey, text, plaintext, len);
+           childScore = (float)scoreTextQgram(plaintext, len);
+           dF = childScore - parentScore;
+
+           // 如果密钥得分更高，直接接受；如果更低也可以以一定概率接受
+           if (dF > 0 || ((float)rand() / RAND_MAX) < exp(dF / T)){
+               strcpy(parentKey, childKey);
+               parentScore = childScore;
+               
+               // 如果新密钥得分是目前最优解，则更新最优解
+               if (childScore > maxScore){
+                   maxScore = childScore;
+                   strcpy(bestKey, childKey);
+               }
+           }
+       }
+   }
+
+   free(plaintext);
+   return maxScore;
+   
 }
 
 /* the function that implements decryption algorithm
@@ -116,6 +162,36 @@ float playfairCrack(char *text,int len, char* bestKey){
 */
 char *playfairDecipher(char *key, char *text, char *result, int len){
     //todo
+    int i, a_row, a_col, b_row, b_col;
+    for(i=0;i<len;i+=2){
+        char a = text[i];
+        char b = text[i+1];
+        if(a == 'J') a = 'I';
+        if(b == 'J') b = 'I';
+
+        // 找出a和b在key中的位置
+        int a_index = strchr(key, a) - key;
+        int b_index = strchr(key, b) - key;
+
+        a_row = a_index / 5;
+        a_col = a_index % 5;
+        b_row = b_index / 5;
+        b_col = b_index % 5;
+
+        if(a_row == b_row){ // 同一行
+            result[i] = key[a_row*5 + (a_col + 4)%5];
+            result[i+1] = key[b_row*5 + (b_col + 4)%5];
+        }
+        else if(a_col == b_col){ // 同一列
+            result[i] = key[((a_row + 4)%5)*5 + a_col];
+            result[i+1] = key[((b_row + 4)%5)*5 + b_col];
+        }
+        else{ // 不同行不同列
+            result[i] = key[a_row*5 + b_col];
+            result[i+1] = key[b_row*5 + a_col];
+        }
+    }
+    result[len] = '\0';
     return result;
 }
 
