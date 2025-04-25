@@ -116,17 +116,22 @@ P = (
 def permutation_by_table(block, block_len, table):
     '''block of length block_len permutated by table table'''
     # WRITE YOUR CODE HERE!
+    result = 0
+    for index, elem in enumerate(table):
+        if block & (1 << (block_len - elem)):
+            result |= (1 << (len(table) - 1 - index))
+    return result
 
 def generate_round_keys(C0, D0):
     '''returns dict of 16 keys (one for each round)'''
     round_keys = dict.fromkeys(range(0,17))
     lrot_values = (1,1,2,2,2,2,2,2,1,2,2,2,2,2,2,1)
- 
+
     # left-rotation function
     lrot = lambda val, r_bits, max_bits: \
-    (val << r_bits%max_bits) & (2**max_bits-1) | \
-    ((val & (2**max_bits-1)) >> (max_bits-(r_bits%max_bits)))
- 
+        (val << r_bits % max_bits) & (2 ** max_bits - 1) | \
+        ((val & (2 ** max_bits - 1)) >> (max_bits - (r_bits % max_bits)))
+
     # initial rotation
     C0 = lrot(C0, 0, 28)
     D0 = lrot(D0, 0, 28)
@@ -134,6 +139,11 @@ def generate_round_keys(C0, D0):
  
     # create 16 more different key pairs
     # WRITE YOUR CODE HERE!
+    for i in range(1, 17):
+        C0 = lrot(C0, lrot_values[i - 1], 28)
+        D0 = lrot(D0, lrot_values[i - 1], 28)
+        round_keys[i] = (C0, D0)
+
  
     # round_keys[1] for first round
     #           [16] for 16th round
@@ -142,7 +152,11 @@ def generate_round_keys(C0, D0):
  
     #form the keys from concatenated CiDi 1<=i<=16 and by apllying PC2
     # WRITE YOUR CODE HERE!
- 
+    for i in range(1, 17):
+        Ci, Di = round_keys[i]
+        CD = (Ci << 28) | Di
+        round_keys[i] = permutation_by_table(CD, 56, PC2)
+
     return round_keys
 
 def round_function(Ri, Ki):
@@ -151,16 +165,26 @@ def round_function(Ri, Ki):
  
     # xor with round key
     # WRITE YOUR CODE HERE!
+    Ri ^= Ki
  
     # split Ri into 8 groups of 6 bit
     # WRITE YOUR CODE HERE!
+    blocks = [(Ri >> (42 - 6 * i)) & 0b111111 for i in range(8)]
  
     # interpret each block as address for the S-boxes
     # WRITE YOUR CODE HERE!
+    sbox_out = 0
+    for i in range(8):
+        block = blocks[i]
+        row = ((block >> 5) << 1) | (block & 1)  # 1st and 6th bit
+        col = (block >> 1) & 0b1111  # middle 4 bits
+        val = Sboxes[i][row * 16 + col]
+        sbox_out = (sbox_out << 4) | val
  
     # pack the blocks together again by concatenating
     # WRITE YOUR CODE HERE!
- 
+    Ri = sbox_out
+
     # another permutation 32bit -> 32bit
     Ri = permutation_by_table(Ri, 32, P)
  
@@ -173,36 +197,49 @@ def encrypt(msg, key, decrypt=False):
  
     # split up key in two halves
     # WRITE YOUR CODE HERE!
-    C0 = 
-    D0 = 
+    C0 = (key >> 28) & ((1 << 28) - 1)
+    D0 = key & ((1 << 28) - 1)
 
     # generate the 16 round keys
     round_keys = generate_round_keys(C0, D0) # 56bit -> PC2 -> 48bit
  
     msg_block = permutation_by_table(msg, 64, IP)
     # WRITE YOUR CODE HERE!
-    L0 = 
-    R0 = 
+    L0 = (msg_block >> 32) & 0xffffffff
+    R0 = msg_block & 0xffffffff
  
     # apply round function 16 times (Feistel Network):
     L_last = L0
     R_last = R0
     # WRITE YOUR CODE HERE!
- 
+    round_range = range(1, 17)
+    if decrypt:
+        round_range = reversed(round_range)
+
+    for i in round_range:
+        Li = R_last
+        Ri = L_last ^ round_function(R_last, round_keys[i])
+        L_last, R_last = Li, Ri
+
+    cipher_block = (R_last << 32) | L_last
+
     # final permutation
     cipher_block = permutation_by_table(cipher_block, 64, IP_INV)
- 
+
     return cipher_block
 
 
 def decrypt(cipher_text, key):
     plain_text = encrypt(cipher_text, key, decrypt=True)
-    print('Plain Text: '+ bytearray.fromhex(plain_text).decode()))
+    print('Plain Text: 0x' + hex(plain_text)[2:])
+
 
 import binascii
 key = int(binascii.hexlify(b'FudanNiu') , 16)
-cipher_text_odd = 0x9b99d07d9980305e
-#cipher_text_even = 0x6f612748df99a70c
+#cipher_text_odd = 0x9b99d07d9980305e
+cipher_text_even = 0x6f612748df99a70c
 
-decrypt(cipher_text_odd,key)
-#decrypt(cipher_text_even,key)
+#decrypt(cipher_text_odd,key)
+decrypt(cipher_text_even,key)
+
+
