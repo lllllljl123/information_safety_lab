@@ -2,6 +2,27 @@ import gmpy2
 
 def attack(c1, c2, e1, e2, n):
    # WRITE YOUR CODE HERE!
+   def extended_gcd(a, b):
+        if b == 0:
+            return (a, 1, 0)
+        else:
+            g, x1, y1 = extended_gcd(b, a % b)
+            return (g, y1, x1 - (a // b) * y1)
+    
+   _, x, y = extended_gcd(e1, e2)
+
+   if x < 0:
+      c1 = pow(pow(c1, -1, n), -x, n)
+   else:
+      c1 = pow(c1, x, n)
+
+   if y < 0:
+      c2 = pow(pow(c2, -1, n), -y, n)
+   else:
+      c2 = pow(c2, y, n)
+
+   m = (c1 * c2) % n
+   return m
 
 
 
